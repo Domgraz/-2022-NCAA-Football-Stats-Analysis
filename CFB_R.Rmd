@@ -1,0 +1,126 @@
+---
+title: "College Football Team Stats Analysis 2022"
+output: html_notebook
+---
+
+
+Libraries to be imported 
+```{r}
+library('dplyr')
+library('ggplot2')
+library('tidyr')
+library('stringr')
+library('corrplot')
+```
+
+As of now I am only reading in the file for the 2022 season but am working on expanding the analysis to between the years of 2013-2022.
+```{r}
+cfb22 <- read.csv("/Users/dominicgraziano/Downloads/CFB 2013-2022/cfb22.csv")
+```
+
+```{r}
+head(cfb22)
+```
+I want to split the data in the Team column to create a column for the team as well as the conference played in.
+
+```{r}
+cfb22 <- cfb22 %>%
+  separate(Team, into = c("Team","Conference"), sep = "\\(")
+```
+
+Wins and losses are also stored in the same column so they need to be seperated to analyze more effectively.
+```{r}
+cfb22 <- cfb22 %>%
+  separate(Win.Loss, into = c("Win","Loss"), sep = "\\-")
+```
+
+```{r}
+cfb22$Conference <- sub("\\)$", "", cfb22$Conference)
+
+head(cfb22)
+
+```
+I want to start of with a correlation plot so this allows me to find the columns I want to investigate with the plot.
+```{r}
+names(cfb22)
+```
+
+With the chosen columns including wins, losses, offensive and defensive stats I then create a new dataframe featuring only these columns, then plot the resulting correlation matrix on a diverging color scheme.
+```{r}
+num_cols <- c("Win", "Loss","Off.Rank","Off.Plays","Off.Yards","Off.Yards.Play","Off.TDs","Off.Yards.per.Game","Def.Rank","Def.Plays","Yards.Allowed","Yards.Play.Allowed","Off.TDs.Allowed","Total.TDs.Allowed","Yards.Per.Game.Allowed")
+
+corr_data <- cfb22[,num_cols]
+
+corr_matrix <- cor(corr_data)
+
+corrplot(corr_matrix, method = "color", type  ="upper", order = "hclust", tl.col = "black", col = colorRampPalette(c("red","white", "blue"))(20)) 
+```
+ I created a new dataframe which is grouped by conference and takes win and loss data to calculate median and quantile for all the conferences.
+ 
+```{r}
+cfb22 <- cfb22 %>%
+  mutate(Win = as.numeric(Win), Loss = as.numeric(Loss))
+
+cfb22group <- cfb22 %>%
+  group_by(Conference) %>%
+  summarise(
+    wins_median = median(Win),
+    losses_median = median(Loss),
+    wins_q1 = quantile(Win, 0.25),
+    wins_q3 = quantile(Win, 0.75),
+    losses_q1 = quantile(Loss, 0.25),
+    losses_q3 = quantile(Loss, 0.75),
+  )
+
+head(cfb22group, n = 20)
+```
+
+Working with this new dataframe I specifically wanted to feature what's known as the 'Power 5' conferences which are the biggest and best conferences for football. This is all to find out if there are discrepancies between these conferences or if they are similar.
+
+```{r}
+p5_conferences <- c("ACC","Big Ten", "SEC", "Big 12", "Pac-12")
+
+filtered_conf <- filter(cfb22group, Conference %in% p5_conferences)
+
+head(filtered_conf)
+```
+
+Created a barplot to showcase the median win per conference in 2022, making sure to descend the order. It doesn't seem like too much variation between conferences for wins
+
+```{r}
+filtered_conf_ordered <- filtered_conf[order(filtered_conf$wins_median, decreasing = TRUE),]
+
+filtered_conf_ordered$Conference <- factor(filtered_conf_ordered$Conference, levels = filtered_conf_ordered$Conference)
+
+ggplot(filtered_conf_ordered, aes(x = factor(Conference, levels = unique(Conference)), y = wins_median)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Wins by Power 5 Conference in 2022", x = "Power 5 Conference", y = "Median Wins") + 
+  theme_minimal() + 
+  ylim(0,9)
+
+```
+
+```{r}
+filtered_conf_ordered <- filtered_conf[order(filtered_conf$losses_median, decreasing = TRUE),]
+
+filtered_conf_ordered$Conference <- factor(filtered_conf_ordered$Conference, levels = filtered_conf_ordered$Conference)
+
+ggplot(filtered_conf_ordered, aes(x = factor(Conference, levels = unique(Conference)), y = losses_median)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Losses by Power 5 Conference in 2022", x = "Power 5 Conference", y = "Median Losses") + 
+  theme_minimal() + 
+  ylim(0,9)
+
+```
+
+
+```{r}
+ggplot(filtered_conf, aes(x = Conference, y = wins_median)) +
+  geom_boxplot(
+    aes(ymin = wins_q1, lower = wins_q3, middle = wins_median, upper = wins_q3, ymax = wins_q3),
+    stat = "identity"
+  ) +
+  labs(title = "Football Wins by Power 5 Conferences in 2022", x = "Conference", y = "Wins") +
+  theme_linedraw()
+```
+
